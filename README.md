@@ -5,13 +5,11 @@ Lambda script triggered when file lands in s3 bucket in aws and organise files b
 
 A beginner-friendly AWS project that automatically sorts files uploaded to an S3 bucket into daily folders (`YYYYMMDD/filename`) using a Python Lambda function triggered on every upload.
 
-> Project concept and walkthrough adapted from Eugene Miguel's tutorial, *["Lambda and Python Projects: Beginner"](https://medium.com/@e-miguel/lambda-and-python-projects-beginner-1b0db01be87c)*. This README restructures that walkthrough into a standalone repo guide with cleaned-up, ready-to-deploy code.
-
 ---
 
 ## The Problem
 
-A company (in the original tutorial, a healthcare business called Med-Forward) has clients uploading many files into a shared S3 bucket. To keep the bucket organized, every file needs to be automatically sorted into a folder based on the date it was uploaded — without any manual intervention.
+A company has clients uploading many files into a shared S3 bucket. To keep the bucket organized, every file needs to be automatically sorted into a folder based on the date it was uploaded — without any manual intervention.
 
 **Goal:** whenever a file lands in the bucket, a Lambda function should trigger automatically and move that file into a folder named after its upload date, in `YYYYMMDD` format.
 
