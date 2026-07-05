@@ -1,9 +1,6 @@
-# aws-lambda-and-python-with-s3-bucket
-Lambda script triggered when file lands in s3 bucket in aws and organise files by date created.
-
 # Organize S3 Objects by Date with AWS Lambda (Python)
 
-A beginner-friendly AWS project that automatically sorts files uploaded to an S3 bucket into daily folders (`YYYYMMDD/filename`) using a Python Lambda function triggered on every upload.
+AWS project that automatically sorts files uploaded to an S3 bucket into daily folders (`YYYYMMDD/filename`) using a Python Lambda function triggered on every upload.
 
 ---
 
