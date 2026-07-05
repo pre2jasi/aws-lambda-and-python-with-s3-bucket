@@ -8,7 +8,7 @@ def lambda_handler(event, context):
 
     s3_client = boto3.client('s3')
 
-    bucket_name = "pyla01-organize-s3-objects"
+    bucket_name = "nubby-organise-s3-objects"
     list_objects_response = s3_client.list_objects_v2(Bucket=bucket_name)
 
     get_contents = list_objects_response.get("Contents")
