@@ -2,6 +2,7 @@
 
 AWS project that automatically sorts files uploaded to an S3 bucket into daily folders (`YYYYMMDD/filename`) using a Python Lambda function triggered on every upload.
 
+
 ---
 
 ## The Problem
@@ -39,6 +40,188 @@ Before writing the code, the environment needs to be set up:
 - An **SSH key pair** added to GitHub, if you plan to clone/push over SSH
 
 ---
+
+# S3 Event-Driven File Organizer (AWS Lambda + Python)
+
+A serverless pipeline that automatically organizes incoming files in an S3 bucket into date-based partitions (`YYYYMMDD/`), triggered in real time on object upload. Built to replace a manual file-sorting process with a zero-touch, event-driven workflow.
+
+---
+
+## 🏗️ Architecture
+
+```
+                ┌──────────────────┐
+   File Upload  │                  │
+   ───────────► │   S3 Bucket      │
+                │  (raw uploads)   │
+                └────────┬─────────┘
+                         │  S3:ObjectCreated (PUT) event
+                         ▼
+                ┌──────────────────┐
+                │  AWS Lambda      │
+                │  (Python/Boto3)  │
+                │                  │
+                │ 1. Read event    │
+                │ 2. Derive date   │
+                │    prefix        │
+                │ 3. Copy object   │
+                │    to YYYYMMDD/  │
+                │ 4. Delete        │
+                │    original      │
+                └────────┬─────────┘
+                         │
+                         ▼
+                ┌──────────────────┐
+                │  S3 Bucket       │
+                │  /YYYYMMDD/file  │
+                └──────────────────┘
+                         │
+                         ▼
+                ┌──────────────────┐
+                │  CloudWatch Logs │
+                │  (execution +    │
+                │   error traces)  │
+                └──────────────────┘
+```
+
+**Flow:** File lands in S3 → `PUT` event triggers Lambda → Lambda computes today's date prefix → copies object into `YYYYMMDD/` folder → deletes the original (unpartitioned) object → logs the operation to CloudWatch.
+
+---
+
+## ⚙️ Tech Stack
+
+| Component | Purpose |
+|---|---|
+| **AWS Lambda** | Serverless compute, executes on S3 event trigger |
+| **Amazon S3** | Source/destination storage, event source |
+| **IAM** | Least-privilege execution role for Lambda |
+| **Boto3** | AWS SDK for Python — S3 object operations |
+| **CloudWatch Logs** | Execution logging and debugging |
+| **Jupyter Notebook** | Local prototyping/validation before deployment |
+
+---
+
+## 📂 Repository Structure
+
+```
+.
+├── src/
+│   └── lambda_function.py       # Lambda handler + core logic
+├── notebooks/
+│   └── prototype.ipynb          # Local exploration/validation notebook
+├── iam/
+│   └── lambda-execution-policy.json
+├── tests/
+│   └── test_lambda_function.py  # Unit tests for handler logic
+├── README.md
+└── requirements.txt
+```
+
+---
+
+## 🚀 How It Works
+
+1. **Trigger** — An S3 `PUT` event (new object created) invokes the Lambda function.
+2. **Handler** — `lambda_handler(event, context)` parses the event payload to extract the bucket name and object key.
+3. **Partitioning logic** — The function derives today's date (`YYYYMMDD`) and checks whether the object already resides in a dated prefix (to avoid reprocessing).
+4. **Copy + delete** — The object is copied into the `YYYYMMDD/` prefix, then the original unpartitioned object is deleted.
+5. **Logging** — Every operation (skip, copy, delete, error) is logged to CloudWatch for observability.
+
+### Example handler signature
+
+```python
+def lambda_handler(event, context):
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    key = event['Records'][0]['s3']['object']['key']
+    # ... partitioning + copy/delete logic
+```
+
+---
+
+## 🔐 IAM Policy (least privilege)
+
+The Lambda execution role is scoped to only what the function needs — not a broad, pre-existing role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::YOUR-BUCKET-NAME",
+        "arn:aws:s3:::YOUR-BUCKET-NAME/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:*:*:*"
+    }
+  ]
+}
+```
+
+---
+
+## ⚠️ Design Challenges & Solutions
+
+| Challenge | Solution |
+|---|---|
+| **Lambda execution contract** — Lambda requires a specific `lambda_handler(event, context)` entry point matching the configured runtime handler setting. | Restructured the script to conform to the handler contract and explicitly aligned the Lambda console's "Handler" field with the module/function name to avoid silent invocation failures. |
+| **No stepwise debugging in Lambda** — the console offers no line-by-line execution like a notebook does. | Fully validated logic locally in Jupyter against representative test data first, minimizing iteration cycles and CloudWatch log-diving in production. |
+| **Recursive trigger risk** — the function reads from and writes to the same bucket, risking infinite self-triggering. | Filtered on object key patterns (excluding already-partitioned prefixes) and `LastModified` metadata so the function only processes genuinely new, unsorted files. |
+| **Over-permissioned roles** — reusing a broad, pre-existing IAM role would violate least-privilege. | Provisioned a dedicated IAM role scoped only to the specific S3 actions and CloudWatch logging the function requires. |
+
+---
+
+## 🧪 Testing
+
+Local unit tests validate the partitioning and filtering logic against mocked S3 events (using `moto` or `unittest.mock`) before any deployment:
+
+```bash
+pip install -r requirements.txt
+pytest tests/
+```
+
+---
+
+## 📦 Deployment
+
+1. Zip the function and dependencies:
+   ```bash
+   cd src
+   zip -r ../deployment-package.zip .
+   ```
+2. Upload the zip to S3 (or directly via the Lambda console/CLI).
+3. Create/update the Lambda function, pointing the handler to `lambda_function.lambda_handler`.
+4. Attach the IAM role defined in `iam/lambda-execution-policy.json`.
+5. Configure an S3 `PUT` event notification on the source bucket, targeting this Lambda function.
+
+---
+
+## 📈 Possible Next Steps
+
+- Add a Dead Letter Queue (DLQ) for failed invocations
+- Move to Infrastructure-as-Code (Terraform/CloudFormation/SAM) for repeatable deployment
+- Add file-type validation before partitioning
+- Emit custom CloudWatch metrics for monitoring pipeline health
+
+---
+
+## Author
+
+Built as a hands-on project to practice serverless architecture, event-driven design, and IAM least-privilege access control on AWS.
 
 ## Project Walkthrough
 
